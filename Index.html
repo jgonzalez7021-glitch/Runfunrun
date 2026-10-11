@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>RunQuest: Boricua Edition 🇵🇷</title>
+  
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    body, html {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: #121212;
+      color: #ffffff;
+    }
+    #app-container {
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      height: 100%;
+      position: relative;
+    }
+    /* Efecto visual de Borrachera / Chinchorreo */
+    #drunk-overlay {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 500;
+      transition: all 0.5s ease;
+    }
+    .drunk-active {
+      animation: sway 3s infinite alternate ease-in-out;
+      backdrop-filter: blur(1.5px) hue-rotate(45deg);
+    }
+    @keyframes sway {
+      0% { transform: rotate(-2deg) scale(1.02); }
+      100% { transform: rotate(2deg) scale(1.02); }
+    }
+
+    /* Top Bar Metrics */
+    #top-bar {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      background: rgba(18, 18, 18, 0.95);
+      border-bottom: 2px solid #333;
+      padding: 10px 4px;
+      z-index: 1000;
+      text-align: center;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+    }
+    .metric-card {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .metric-value {
+      font-size: 1.1rem;
+      font-weight: 800;
+      color: #00E676;
+    }
+    .metric-label {
+      font-size: 0.6rem;
+      color: #aaa;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    
+    /* Map Area */
+    #map {
+      flex: 1;
+      width: 100%;
+      z-index: 1;
+    }
+    
+    /* Control Overlay Bar */
+    #bottom-bar {
+      position: absolute;
+      bottom: 25px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 1000;
+      display: flex;
+      gap: 12px;
+      width: 92%;
+      max-width: 420px;
+    }
+    .btn-action {
+      flex: 1;
+      padding: 16px;
+      border: none;
+      border-radius: 30px;
+      font-size: 1rem;
+      font-weight: 800;
+      color: #fff;
+      cursor: pointer;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 8px;
+    }
+    #btn-start {
+      background: linear-gradient(135deg, #00E676, #00B0FF);
+      color: #000;
+    }
+    #btn-stop {
+      background: linear-gradient(135deg, #FF1744, #D50000);
+      display: none;
+    }
+    .btn-icon {
+      width: 50px;
+      height: 50px;
+      border-radius: 50%;
+      background: #222;
+      border: 1px solid #444;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.3rem;
+      color: #fff;
+      cursor: pointer;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.4);
+    }
+    
+    /* Config Modal */
+    .modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.85);
+      z-index: 2000;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .modal-content {
+      background: #1e1e1e;
+      border-radius: 16px;
+      padding: 20px;
+      width: 100%;
+      max-width: 350px;
+      border: 1px solid #333;
+    }
+    .modal-header {
+      font-size: 1.2rem;
+      font-weight: bold;
+      margin-bottom: 15px;
+      color: #00E676;
+    }
+    .setting-group {
+      margin-bottom: 15px;
+    }
+    .setting-group label {
+      display: block;
+      font-size: 0.85rem;
+      color: #ccc;
+      margin-bottom: 5px;
+    }
+    .setting-group select, .setting-group input {
+      width: 100%;
+      padding: 10px;
+      background: #2b2b2b;
+      border: 1px solid #444;
+      color: #fff;
+      border-radius: 8px;
+    }
+    .btn-close {
+      width: 100%;
+      padding: 12px;
+      background: #00E676;
+      border: none;
+      border-radius: 8px;
+      color: #000;
+      font-weight: bold;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="app-container">
+    <div id="drunk-overlay"></div>
+    
+    <!-- Métricas Superiores -->
+    <div id="top-bar">
+      <div class="metric-card">
+        <span class="metric-value" id="val-dist">0.00</span>
+        <span class="metric-label">Millas</span>
+      </div>
+      <div class="metric-card">
+        <span class="metric-value" id="val-steps">0</span>
+        <span class="metric-label">Pasos</span>
+      </div>
+      <div class="metric-card">
+        <span class="metric-value" id="val-pace">0:00</span>
+        <span class="metric-label">min / mi</span>
+      </div>
+      <div class="metric-card">
+        <span class="metric-value" id="val-vibe">0%</span>
+        <span class="metric-label" id="lbl-vibe">Vibe 🇵🇷</span>
+      </div>
+    </div>
+
+    <!-- Mapa Leaflet -->
+    <div id="map"></div>
+
+    <!-- Barra de Controles Inferior -->
+    <div id="bottom-bar">
+      <button class="btn-icon" id="btn-config" title="Ajustes">⚙️</button>
+      <button class="btn-action" id="btn-start">¡ARRANCAR CARRERA!</button>
+      <button class="btn-action" id="btn-stop">PAUSAR / TERMINAR</button>
+    </div>
+  </div>
+
+  <!-- Modal de Configuración -->
+  <div class="modal" id="config-modal">
+    <div class="modal-content">
+      <div class="modal-header">Modos de Juego 🇵🇷</div>
+      <div class="setting-group">
+        <label>Selecciona tu Reto:</label>
+        <select id="sel-mode">
+          <option value="chupa">🐐 Chupacabras Run (Monstruo Diabólico)</option>
+          <option value="coqui">🐸 Cacería de Coquíes</option>
+          <option value="ron">🍹 Ron Boricua Power-ups</option>
+          <option value="borracho">🍺 Ruta del Borracho (Chinchorreo)</option>
+        </select>
+      </div>
+      <div class="setting-group" id="group-diff">
+        <label>Velocidad Mínima Chupacabras:</label>
+        <select id="sel-difficulty">
+          <option value="1.2">Suave (1.2 mph - Caminata)</option>
+          <option value="3.5">Mediano (3.5 mph - Trote)</option>
+          <option value="6.5">¡A Fuego! 🔥 (6.5 mph)</option>
+        </select>
+      </div>
+      <button class="btn-close" id="btn-close-modal">GUARDAR Y JUGAR</button>
+    </div>
+  </div>
+
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <script>
+    let map, userMarker, monsterMarker;
+    let watchId = null;
+    let isTracking = false;
+    let userPath = [];
+    let polyline = null;
+    
+    let totalDistanceMiles = 0;
+    let stepCount = 0;
+    let startTime = null;
+    let timerInterval = null;
+    let vibeLevel = 0;
+    
+    let userPos = null;
+    let monsterPos = null;
+    let gameMode = 'chupa';
+    let chupacabrasSpeedMph = 1.2;
+    let activeItems = [];
+
+    function initMap() {
+      const defaultLat = 18.4655;
+      const defaultLng = -66.1057;
+
+      map = L.map('map', { zoomControl: false }).setView([defaultLat, defaultLng], 16);
+
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap'
+      }).addTo(map);
+
+      // Iconos personalizados con el Chupacabras Diabólico 👹
+      const runnerIcon = L.divIcon({ html: '🏃‍♂️', className: '', iconSize: [32, 32] });
+      const monsterIcon = L.divIcon({ html: '👹', className: '', iconSize: [36, 36] });
+
+      userMarker = L.marker([defaultLat, defaultLng], { icon: runnerIcon }).addTo(map);
+      monsterMarker = L.marker([defaultLat, defaultLng], { icon: monsterIcon }).addTo(map);
+      monsterMarker.setOpacity(0); // Oculto hasta que inicie Chupacabras
+
+      polyline = L.polyline([], { color: '#00E676', weight: 5 }).addTo(map);
+
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(p => {
+          const lat = p.coords.latitude;
+          const lng = p.coords.longitude;
+          userPos = { lat, lng };
+          map.setView([lat, lng], 17);
+          userMarker.setLatLng([lat, lng]);
+          spawnItems();
+        });
+      }
+    }
+
+    function spawnItems() {
+      if (!userPos) return;
+      activeItems.forEach(i => map.removeLayer(i.marker));
+      activeItems = [];
+
+      let emojis = ['🍺', '🍹', '🍻', '🍷'];
+      if (gameMode === 'coqui') emojis = ['🐸', '🟢', '✨'];
+      else if (gameMode === 'ron') emojis = ['🍹', '🥃', '⚡'];
+      else if (gameMode === 'chupa') emojis = ['⚡', '🔥'];
+
+      for (let i = 0; i < 7; i++) {
+        const offLat = (Math.random() - 0.5) * 0.005;
+        const offLng = (Math.random() - 0.5) * 0.005;
+        const emoji = emojis[Math.floor(Math.random() * emojis.length)];
+        const icon = L.divIcon({ html: emoji, className: '', iconSize: [26, 26] });
+        const m = L.marker([userPos.lat + offLat, userPos.lng + offLng], { icon }).addTo(map);
+        activeItems.push({ lat: userPos.lat + offLat, lng: userPos.lng + offLng, marker: m });
+      }
+    }
+
+    function getDistanceInMiles(lat1, lon1, lat2, lon2) {
+      const R = 3958.8;
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLon = (lon2 - lon1) * Math.PI / 180;
+      const a = Math.sin(dLat/2)**2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon/2)**2;
+      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    }
+
+    function startRun() {
+      isTracking = true;
+      document.getElementById('btn-start').style.display = 'none';
+      document.getElementById('btn-stop').style.display = 'flex';
+
+      totalDistanceMiles = 0;
+      stepCount = 0;
+      vibeLevel = 0;
+      userPath = [];
+      startTime = Date.now();
+
+      timerInterval = setInterval(updateTimerAndPace, 1000);
+
+      if (window.DeviceMotionEvent) {
+        window.addEventListener('devicemotion', handleMotion);
+      }
+
+      if (navigator.geolocation) {
+        watchId = navigator.geolocation.watchPosition(updatePosition, null, {
+          enableHighAccuracy: true,
+          maximumAge: 1000,
+          timeout: 5000
+        });
+      }
+    }
+
+    let lastAccel = 0;
+    function handleMotion(e) {
+      if (!isTracking) return;
+      const acc = e.accelerationIncludingGravity;
+      if (!acc) return;
+      const totalAcc = Math.sqrt(acc.x**2 + acc.y**2 + acc.z**2);
+      if (Math.abs(totalAcc - lastAccel) > 2.8) {
+        stepCount++;
+        document.getElementById('val-steps').innerText = stepCount;
+      }
+      lastAccel = totalAcc;
+    }
+
+    function updatePosition(p) {
+      if (!isTracking) return;
+      const lat = p.coords.latitude;
+      const lng = p.coords.longitude;
+
+      if (userPos) {
+        const d = getDistanceInMiles(userPos.lat, userPos.lng, lat, lng);
+        if (d > 0.0005 && d < 0.1) {
+          totalDistanceMiles += d;
+        }
+      }
+
+      userPos = { lat, lng };
+      userPath.push([lat, lng]);
+
+      userMarker.setLatLng([lat, lng]);
+      polyline.setLatLngs(userPath);
+      map.panTo([lat, lng]);
+
+      document.getElementById('val-dist').innerText = totalDistanceMiles.toFixed(2);
+
+      checkItemCollection();
+      if (gameMode === 'chupa') {
+        updateMonsterPosition();
+      }
+    }
+
+    function checkItemCollection() {
+      activeItems.forEach((item, index) => {
+        const d = getDistanceInMiles(userPos.lat, userPos.lng, item.lat, item.lng);
+        if (d < 0.012) { // Recogido
+          map.removeLayer(item.marker);
+          activeItems.splice(index, 1);
+          vibeLevel += 15;
+          if (vibeLevel > 100) vibeLevel = 100;
+          document.getElementById('val-vibe').innerText = vibeLevel + '%';
+
+          if (gameMode === 'borracho' && vibeLevel >= 30) {
+            document.getElementById('drunk-overlay').classList.add('drunk-active');
+          }
+        }
+      });
+    }
+
+    function updateMonsterPosition() {
+      if (!monsterPos) {
+        monsterPos = { lat: userPos.lat - 0.0004, lng: userPos.lng - 0.0004 };
+      }
+      const dLat = userPos.lat - monsterPos.lat;
+      const dLng = userPos.lng - monsterPos.lng;
+      const factor = chupacabrasSpeedMph * 0.000006;
+      monsterPos.lat += dLat * factor;
+      monsterPos.lng += dLng * factor;
+      monsterMarker.setLatLng([monsterPos.lat, monsterPos.lng]);
+    }
+
+    function updateTimerAndPace() {
+      const elapsedSec = Math.floor((Date.now() - startTime) / 1000);
+      
+      // Cálculo del Ritmo (Keynes de las millas - min/mi)
+      if (totalDistanceMiles > 0.05) {
+        const totalMins = (elapsedSec / 60) / totalDistanceMiles;
+        const mins = Math.floor(totalMins);
+        const secs = Math.floor((totalMins - mins) * 60);
+        document.getElementById('val-pace').innerText = `${mins}:${secs.toString().padStart(2, '0')}`;
+      } else {
+        document.getElementById('val-pace').innerText = `0:00`;
+      }
+    }
+
+    function stopRun() {
+      isTracking = false;
+      document.getElementById('btn-start').style.display = 'flex';
+      document.getElementById('btn-stop').style.display = 'none';
+
+      if (watchId) navigator.geolocation.clearWatch(watchId);
+      if (timerInterval) clearInterval(timerInterval);
+      window.removeEventListener('devicemotion', handleMotion);
+      document.getElementById('drunk-overlay').classList.remove('drunk-active');
+    }
+
+    // Configuración y Modales
+    document.getElementById('btn-config').onclick = () => {
+      document.getElementById('config-modal').style.display = 'flex';
+    };
+    document.getElementById('sel-mode').onchange = (e) => {
+      const val = e.target.value;
+      document.getElementById('group-diff').style.display = (val === 'chupa') ? 'block' : 'none';
+    };
+    document.getElementById('btn-close-modal').onclick = () => {
+      gameMode = document.getElementById('sel-mode').value;
+      chupacabrasSpeedMph = parseFloat(document.getElementById('sel-difficulty').value);
+      monsterMarker.setOpacity(gameMode === 'chupa' ? 1 : 0);
+      document.getElementById('lbl-vibe').innerText = gameMode === 'borracho' ? 'Borracho' : 'Vibe 🇵🇷';
+      spawnItems();
+      document.getElementById('config-modal').style.display = 'none';
+    };
+
+    document.getElementById('btn-start').onclick = startRun;
+    document.getElementById('btn-stop').onclick = stopRun;
+
+    window.onload = initMap;
+  </script>
+</body>
+</html>
